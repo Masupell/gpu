@@ -343,7 +343,7 @@ async fn run_compute_shader()
     rx.receive().await.unwrap().unwrap();
 
     let data = buffer_slice.get_mapped_range();
-    let result: &[u32] = bytemuck::cast_slice(&data);
+    let result: &[f32] = bytemuck::cast_slice(&data);
     println!("{:?}", result);
     println!()
 }
@@ -356,15 +356,16 @@ fn main()
     // pollster::block_on(run());
     println!("Start");
     let start = std::time::Instant::now();
-    // pollster::block_on(run_compute_shader());
+    pollster::block_on(run_compute_shader());
 
 
     // let input_data: Vec<u32> = (1..=15000000).collect();
-    // let mut output_data: Vec<u32> = vec![0; input_data.len()];
+    // let input_data: Vec<f32> = (1..=15000000).map(|x| x as f32).collect();
+    // let mut output_data: Vec<f32> = vec![0.0; input_data.len()];
 
-    // for i in input_data.iter()
+    // for (i, value) in input_data.iter().enumerate()
     // {
-    //     output_data[*i as usize - 1] = *i*2/3+5;
+    //     output_data[i] = value*1.0001*value.sin();
     // }
     // print!("{:?}", output_data);
     // println!(); 
