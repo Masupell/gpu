@@ -6,7 +6,7 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>)
 {
     // let index = id.x; // 1D
     let index = id.x + id.y * 65535 * 128; // 2D
-    if (u32(index) < arrayLength(&input_buffer))
+    if (index < arrayLength(&input_buffer))
     {
         output_buffer[index] = input_buffer[index];round_to_de(f32((i32(input_buffer[index] *1)) % 314+1)/100.0, 2);
     }

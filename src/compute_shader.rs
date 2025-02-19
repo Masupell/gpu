@@ -4,6 +4,22 @@ use wgpu::util::DeviceExt;
 // big: max elemenst depends on type (number elements * element size) and max buffersize (256MB for my GPU)/ in this case the workgroup size, which is 128
 // so here for f32 (4bytes per element) -> 33554432 (33M)
 // Could make it bigger, by using multiple buffers, but not worth it for me right now
+
+// Shader Path for .wgsl file
+// Would also need to have input + output bindings with same variable type as T, like so:
+// @group(0) @binding(0) var<storage, read> input_buffer: array<T>;
+// @group(0) @binding(1) var<storage, read_write> output_buffer: array<T>;
+// T being T (but not written as generic (f32, u32, i32,...))
+// Also main always has to look like that:
+// @compute @workgroup_size(128) -> workgroup_size same as here
+// fn main(@builtin(global_invocation_id) id: vec3<u32>) // always u32, because that is just an index
+// To properly index, an index variable has to be declared (atleast for 2D workgroups):
+// let index = id.x; -> would be for 1D, but therefore not really necessary
+// let index = id.x + id.y * 65535 * 128; -> for 2D
+// If the element_size is a multiple of workgroup_size, the following is not needed, but otherwise add this, before doing anything else:
+// if (index < arrayLength(&input_buffer)) -> makes sure index is not out of bounds *then write any calculations in the if block
+// output like this: output_buffer[index] = output;
+
 pub async fn compute_shader<T: bytemuck::Pod>(input: &[T], shader_path: &str, small: bool) -> Vec<T>
 {
     let input_data = input;
@@ -26,7 +42,7 @@ pub async fn compute_shader<T: bytemuck::Pod>(input: &[T], shader_path: &str, sm
     let workgroup_size = 128;
     let num_values = input_data.len() as u32;
 
-    let buffer_size = (input_data.len() * std::mem::size_of::<u32>()) as wgpu::BufferAddress;
+    let buffer_size = (input_data.len() * std::mem::size_of::<T>()) as wgpu::BufferAddress;
 
     // Input Buffer (Read Only Storage)
     let input_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor
@@ -45,6 +61,7 @@ pub async fn compute_shader<T: bytemuck::Pod>(input: &[T], shader_path: &str, sm
         mapped_at_creation: false,
     });
 
+    // To send the data back to the CPU
     let readback_buffer = device.create_buffer(&wgpu::BufferDescriptor 
     {
         label: Some("Readback Buffer"),
@@ -137,13 +154,13 @@ pub async fn compute_shader<T: bytemuck::Pod>(input: &[T], shader_path: &str, sm
         if small
         {
             let workgroups = (num_values + workgroup_size - 1) / workgroup_size;
-            compute_pass.dispatch_workgroups(workgroups, 1, 1);
+            compute_pass.dispatch_workgroups(workgroups, 1, 1); // 1D
         }
         else 
         {
             let workgroups_x = 65535;
             let workgroups_y = (num_values + workgroup_size - 1) / workgroups_x;
-            compute_pass.dispatch_workgroups(workgroups_x, workgroups_y, 1);
+            compute_pass.dispatch_workgroups(workgroups_x, workgroups_y, 1); // 2D
         }
     }
 
