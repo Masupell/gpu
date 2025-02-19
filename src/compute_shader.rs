@@ -1,6 +1,10 @@
 use wgpu::util::DeviceExt;
 
-pub async fn run_compute_shader(input: &[f32]) -> (Vec<f32>, Vec<f32>)
+// small: data with <= 8388480 elements
+// big: max elemenst depends on type (number elements * element size) and max buffersize (256MB for my GPU)/ in this case the workgroup size, which is 128
+// so here for f32 (4bytes per element) -> 33554432 (33M)
+// Could make it bigger, by using multiple buffers, but not worth it for me right now
+pub async fn compute_shader<T: bytemuck::Pod>(input: &[T], shader_path: &str, small: bool) -> Vec<T>
 {
     let input_data = input;
     
@@ -19,8 +23,6 @@ pub async fn run_compute_shader(input: &[f32]) -> (Vec<f32>, Vec<f32>)
 
     let (device, queue) = adapter.request_device(&Default::default(), None).await.unwrap();
 
-    // let input_data: Vec<f32> = (1..=15000000).map(|x| x as f32).collect();
-
     let workgroup_size = 128;
     let num_values = input_data.len() as u32;
 
@@ -29,7 +31,7 @@ pub async fn run_compute_shader(input: &[f32]) -> (Vec<f32>, Vec<f32>)
     // Input Buffer (Read Only Storage)
     let input_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor
     {   
-        label: Some("Storage Buffer"),
+        label: Some("Input Buffer"),
         contents: bytemuck::cast_slice(&input_data),
         usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
     });
@@ -54,7 +56,7 @@ pub async fn run_compute_shader(input: &[f32]) -> (Vec<f32>, Vec<f32>)
     let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor 
     {
         label: Some("Compute Shader"),
-        source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
+        source: wgpu::ShaderSource::Wgsl(std::fs::read_to_string(shader_path).unwrap().into()), //No error handling
     });
 
     let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor 
@@ -132,10 +134,17 @@ pub async fn run_compute_shader(input: &[f32]) -> (Vec<f32>, Vec<f32>)
         compute_pass.set_pipeline(&compute_pipeline);
         compute_pass.set_bind_group(0, &bind_group, &[]);
     
-        // let workgroups = (num_values + workgroup_size - 1) / workgroup_size;
-        let workgroups_x = 65535;
-        let workgroups_y = (num_values + workgroup_size - 1) / workgroups_x;
-        compute_pass.dispatch_workgroups(workgroups_x, workgroups_y, 1); //compute_pass.dispatch_workgroups(workgroups, 1, 1);
+        if small
+        {
+            let workgroups = (num_values + workgroup_size - 1) / workgroup_size;
+            compute_pass.dispatch_workgroups(workgroups, 1, 1);
+        }
+        else 
+        {
+            let workgroups_x = 65535;
+            let workgroups_y = (num_values + workgroup_size - 1) / workgroups_x;
+            compute_pass.dispatch_workgroups(workgroups_x, workgroups_y, 1);
+        }
     }
 
     encoder.copy_buffer_to_buffer(&output_buffer, 0, &readback_buffer, 0, buffer_size);
@@ -153,6 +162,6 @@ pub async fn run_compute_shader(input: &[f32]) -> (Vec<f32>, Vec<f32>)
     rx.receive().await.unwrap().unwrap();
 
     let data = buffer_slice.get_mapped_range();
-    let result: &[f32] = bytemuck::cast_slice(&data);
-    (result.to_vec(), input_data.to_vec())
+    let result: &[T] = bytemuck::cast_slice(&data);
+    result.to_vec()
 }

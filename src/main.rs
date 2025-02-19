@@ -358,10 +358,9 @@ fn main()
     // pollster::block_on(run());
     println!("Start");
     let start = std::time::Instant::now();
-    let input_data: Vec<f32> = (1..=15000000).map(|x| x as f32).collect();
-    let (test, test2) = pollster::block_on(compute_shader::run_compute_shader(&input_data));
+    let input_data: Vec<f32> = (1..=33554432).map(|x| x as f32).collect();
+    let test = pollster::block_on(compute_shader::compute_shader(&input_data, "src/shader.wgsl", false));
     println!("{:?}", test);
-    println!("1: {}\n2: {}", test.len(), test2.len());
 
 
     // let input_data: Vec<u32> = (1..=15000000).collect();
